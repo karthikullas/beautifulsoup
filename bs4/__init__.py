@@ -23,6 +23,7 @@ __license__ = "MIT"
 __all__ = [
     "AttributeResemblesVariableWarning",
     "BeautifulSoup",
+    "SoupReplacer",
     "Comment",
     "Declaration",
     "ProcessingInstruction",
@@ -130,6 +131,18 @@ from bs4._warnings import (
 )
 
 
+class SoupReplacer:
+    """Replace one tag name with another during parsing."""
+
+    def __init__(self, og_tag: str, alt_tag: str):
+        self.og_tag = og_tag
+        self.alt_tag = alt_tag
+
+    def replace(self, tag_name: str) -> str:
+        if tag_name == self.og_tag:
+            return self.alt_tag
+        return tag_name
+
 class BeautifulSoup(Tag):
     """A data structure representing a parsed HTML or XML document.
 
@@ -212,6 +225,7 @@ class BeautifulSoup(Tag):
         features: Optional[Union[str, Sequence[str]]] = None,
         builder: Optional[Union[TreeBuilder, Type[TreeBuilder]]] = None,
         parse_only: Optional[SoupStrainer] = None,
+        replacer: Optional[SoupReplacer] = None,
         from_encoding: Optional[_Encoding] = None,
         exclude_encodings: Optional[_Encodings] = None,
         element_classes: Optional[Dict[Type[PageElement], Type[PageElement]]] = None,
@@ -435,6 +449,7 @@ class BeautifulSoup(Tag):
         self.known_xml = self.is_xml
         self._namespaces = dict()
         self.parse_only = parse_only
+        self.replacer = replacer
 
         if hasattr(markup, "read"):  # It's a file-type object.
             markup = markup.read()
@@ -1017,6 +1032,8 @@ class BeautifulSoup(Tag):
         """
         # print("Start tag %s: %s" % (name, attrs))
         self.endData()
+        if self.replacer is not None:
+            name = self.replacer.replace(name)
 
         if (
             self.parse_only
@@ -1060,6 +1077,8 @@ class BeautifulSoup(Tag):
         """
         # print("End tag: " + name)
         self.endData()
+        if self.replacer is not None:
+            name = self.replacer.replace(name)
         self._popToTag(name, nsprefix)
 
     def handle_data(self, data: str) -> None:
