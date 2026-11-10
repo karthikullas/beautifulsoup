@@ -96,6 +96,7 @@ from .filter import (
 from typing import (
     Any,
     cast,
+    Callable,
     Counter as CounterType,
     Dict,
     Iterator,
@@ -132,16 +133,36 @@ from bs4._warnings import (
 
 
 class SoupReplacer:
-    """Replace one tag name with another during parsing."""
+    """Transform tag names and attributes during parsing."""
 
-    def __init__(self, og_tag: str, alt_tag: str):
+    def __init__(
+        self,
+        og_tag: Optional[str] = None,
+        alt_tag: Optional[str] = None,
+        name_xformer: Optional[Callable[[Tag], str]] = None,
+        attrs_xformer: Optional[Callable[[Tag], Dict[str, Any]]] = None,
+        xformer: Optional[Callable[[Tag], None]] = None,
+    ):
         self.og_tag = og_tag
         self.alt_tag = alt_tag
+        self.name_xformer = name_xformer
+        self.attrs_xformer = attrs_xformer
+        self.xformer = xformer
 
     def replace(self, tag_name: str) -> str:
-        if tag_name == self.og_tag:
+        if self.og_tag is not None and tag_name == self.og_tag:
             return self.alt_tag
         return tag_name
+
+    def transform(self, tag: Tag) -> None:
+        if self.name_xformer is not None:
+            tag.name = self.name_xformer(tag)
+
+        if self.attrs_xformer is not None:
+            tag.attrs = self.attrs_xformer(tag)
+
+        if self.xformer is not None:
+            self.xformer(tag)
 
 class BeautifulSoup(Tag):
     """A data structure representing a parsed HTML or XML document.
@@ -1032,8 +1053,6 @@ class BeautifulSoup(Tag):
         """
         # print("Start tag %s: %s" % (name, attrs))
         self.endData()
-        if self.replacer is not None:
-            name = self.replacer.replace(name)
 
         if (
             self.parse_only
@@ -1061,6 +1080,14 @@ class BeautifulSoup(Tag):
         )
         if tag is None:
             return tag
+
+        # Keep the original name for matching the closing tag.
+        tag._original_name = name
+
+        if self.replacer is not None:
+            tag.name = self.replacer.replace(tag.name)
+            self.replacer.transform(tag)
+
         if self._most_recent_element is not None:
             self._most_recent_element.next_element = tag
         self._most_recent_element = tag
@@ -1077,8 +1104,18 @@ class BeautifulSoup(Tag):
         """
         # print("End tag: " + name)
         self.endData()
-        if self.replacer is not None:
-            name = self.replacer.replace(name)
+
+        # Find the opening tag using its original parser name.
+        for i in range(len(self.tagStack) - 1, 0, -1):
+            tag = self.tagStack[i]
+            if (
+                getattr(tag, "_original_name", tag.name) == name
+                and tag.prefix == nsprefix
+            ):
+                while len(self.tagStack) - 1 >= i:
+                    self.popTag()
+                return
+
         self._popToTag(name, nsprefix)
 
     def handle_data(self, data: str) -> None:
