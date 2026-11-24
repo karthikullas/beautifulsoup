@@ -198,6 +198,11 @@ class BeautifulSoup(Tag):
     #: Since `BeautifulSoup` subclasses `Tag`, it's possible to treat it as
     #: a `Tag` with a `Tag.name`. Hoever, this name makes it clear the
     #: `BeautifulSoup` object isn't a real markup tag.
+
+    def __iter__(self) -> Iterator[PageElement]:
+        """Iterate over all nodes in the document tree."""
+        return self.descendants
+    
     ROOT_TAG_NAME: str = "[document]"
 
     #: If the end-user gives no indication which tree builder they
